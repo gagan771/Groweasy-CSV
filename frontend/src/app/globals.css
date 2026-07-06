@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+/* Enable dark mode via the .dark class on <html> */
+@variant dark (&:where(.dark, .dark *));
+
+/* Smooth color transitions for dark mode */
+*, *::before, *::after {
+  transition-property: background-color, border-color, color;
+  transition-duration: 150ms;
+  transition-timing-function: ease;
+}
+
+/* Live record fade-in animation for the progress step */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fadeIn {
+  animation: fadeIn 0.25s ease-out;
+}
