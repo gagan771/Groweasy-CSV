@@ -77,10 +77,13 @@ describe("leadRecordSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("rejects a record missing created_at", () => {
+  it("defaults created_at to empty string when missing", () => {
     const { created_at: _, ...rest } = validRecord;
     const result = leadRecordSchema.safeParse(rest);
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.created_at).toBe("");
+    }
   });
 
   it("rejects created_at that is not a parseable date", () => {

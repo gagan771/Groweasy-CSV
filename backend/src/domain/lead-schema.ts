@@ -25,9 +25,11 @@ export const dataSourceValues = [
 export const leadRecordSchema = z.object({
   created_at: z
     .string()
+    .nullish()
+    .default("")
     .refine(
       (value) =>
-        value.trim() === "" || !Number.isNaN(new Date(value).getTime()),
+        value === "" || !Number.isNaN(new Date(value).getTime()),
       {
         message: "created_at must be empty or a valid date string parseable by new Date()",
       },
