@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { leadRecordSchema, normalizeLeadRecord, crmStatusValues, dataSourceValues } from "../domain/lead-schema";
+import {
+  leadRecordSchema,
+  normalizeLeadRecord,
+  mergeContactFields,
+  crmStatusValues,
+  dataSourceValues,
+} from "../domain/lead-schema";
 
 // ---------------------------------------------------------------------------
 // leadRecordSchema
@@ -95,6 +101,11 @@ describe("leadRecordSchema", () => {
     }
   });
 
+  it("allows created_at to be empty string when source data has no date", () => {
+    const result = leadRecordSchema.safeParse({ ...validRecord, created_at: "" });
+    expect(result.success).toBe(true);
+  });
+
   it("exports the correct crm_status enum values", () => {
     expect(crmStatusValues).toContain("GOOD_LEAD_FOLLOW_UP");
     expect(crmStatusValues).toContain("DID_NOT_CONNECT");
@@ -147,5 +158,45 @@ describe("normalizeLeadRecord", () => {
     const raw = leadRecordSchema.parse({ created_at: "2026-01-01", crm_status: "BAD_LEAD", data_source: "eden_park" });
     const normalized = normalizeLeadRecord(raw);
     expect(normalized.data_source).toBe("eden_park");
+  });
+});
+
+describe("mergeContactFields", () => {
+  it("maps semantic headers and keeps owner email out of lead email", () => {
+    const base = leadRecordSchema.parse({
+      created_at: "",
+      name: "Sunita Rao",
+      email: "sneha@groweasy.com",
+      country_code: "",
+      mobile_without_country_code: "9876543210",
+      company: "",
+      city: "",
+      state: "",
+      country: "",
+      lead_owner: "",
+      crm_status: "DID_NOT_CONNECT",
+      crm_note: "",
+      data_source: "",
+      possession_time: "",
+      description: "",
+    });
+
+    const merged = mergeContactFields(base, {
+      Name: "Sunita Rao",
+      Business: "Verma Realty",
+      Location: "Gurgaon",
+      Region: "Haryana",
+      Nation: "India",
+      Phone: "9876543210",
+      "Assigned To": "sneha@groweasy.com",
+    });
+
+    expect(merged.email).toBe("");
+    expect(merged.mobile_without_country_code).toBe("9876543210");
+    expect(merged.lead_owner).toBe("sneha@groweasy.com");
+    expect(merged.company).toBe("Verma Realty");
+    expect(merged.city).toBe("Gurgaon");
+    expect(merged.state).toBe("Haryana");
+    expect(merged.country).toBe("India");
   });
 });

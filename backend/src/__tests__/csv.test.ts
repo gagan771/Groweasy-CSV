@@ -115,6 +115,15 @@ describe("hasEmailOrMobile", () => {
   it("returns false for a completely empty row", () => {
     expect(hasEmailOrMobile({})).toBe(false);
   });
+
+  it("ignores owner-assignment email when deciding lead contact presence", () => {
+    const row = {
+      name: "",
+      "Assigned To": "sneha@groweasy.com",
+      notes: "Unknown Corp",
+    };
+    expect(hasEmailOrMobile(row)).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------

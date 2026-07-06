@@ -1,177 +1,281 @@
 # GrowEasy CSV Importer
 
-AI-powered CSV importer for GrowEasy CRM. Upload any CSV in any format — the AI maps it to the CRM schema automatically.
+GrowEasy CSV Importer is a full-stack app that accepts **arbitrary CSV files** and converts them into a standardized GrowEasy CRM lead format using an LLM.
 
-## Features
+## Project overview
 
-- **Drag & Drop** or file-picker CSV upload
-- **Client-side preview** — CSV is parsed in the browser with no server calls until you confirm
-- **Virtualized table** — handles CSVs with 100,000+ rows without lag
-- **Streaming AI extraction** — results appear live as each batch completes (SSE)
-- **Live progress bar** — shows batch-by-batch progress with running counts
-- **Concurrent batch processing** — up to 3 AI batches run in parallel
-- **Retry with exponential backoff** — 3 attempts per batch (1s, 2s delay)
-- **Dark mode** — toggle persisted to localStorage, respects system preference
-- **Skip logic** — rows without an email or mobile are skipped and explained
-- **Full CRM schema** — all 15 fields including possession_time, description, crm_note
+The app is built as a monorepo with:
 
----
+- **Frontend (Next.js + React + TypeScript):** upload, preview, live progress, and final results UI.
+- **Backend (Express + TypeScript):** CSV parsing, row filtering, batch AI extraction, validation, and response streaming.
 
-## Quick Start
+## Architecture
 
-```bash
-# 1. Install dependencies (root, backend, frontend)
-npm install
-
-# 2. Configure environment
-cp backend/.env.example backend/.env
-# Edit backend/.env and set OPENROUTER_API_KEY=your_key_here
-
-# 3. Start both servers
-npm run dev
+```text
+CSV Upload
+  -> Frontend parses CSV for preview only (no AI call yet)
+  -> User confirms import
+  -> Backend parses CSV again
+  -> Contact detection ignores owner/assignee fields (e.g. Assigned To)
+  -> Skip rows missing both lead email and lead mobile
+  -> Split rows into batches
+  -> Send batches to AI with concurrency + retry
+  -> Validate/normalize records against CRM schema
+  -> Apply semantic fallback mapping (Business->company, Location->city, Region->state, Nation->country)
+  -> Keep owner-assignment values in lead_owner only (never in lead email/mobile)
+  -> Return:
+       - JSON response (/api/imports), or
+       - live SSE events (/api/imports/stream)
+  -> Frontend renders imported + skipped records
 ```
 
-- **Backend** → `http://localhost:8000`
-- **Frontend** → `http://localhost:3000`
+## Tech stack
 
----
+| Layer | Technologies |
+|---|---|
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
+| UI/Data handling | `react-dropzone`, `papaparse`, `@tanstack/react-table`, `@tanstack/react-virtual` |
+| Backend | Node.js, Express, TypeScript |
+| Backend libraries | `multer` (upload), `papaparse` (CSV parse), `zod` (schema validation), `cors`, `dotenv` |
+| AI integration | OpenRouter Chat Completions API (configurable model) |
+| Testing | Vitest (backend unit tests) |
+| Containers | Dockerfiles for backend and frontend |
 
-## Environment Variables
+## Key features
 
-### Backend (`backend/.env`)
+- Drag-and-drop CSV upload
+- Client-side preview before import
+- Streaming extraction progress (SSE)
+- Concurrent AI batch processing
+- Retry with exponential backoff for AI requests
+- Strict CRM enum enforcement via schema validation
+- Semantic header mapping fallback for common aliases (Business/Location/Region/Nation, etc.)
+- Owner-email leakage guard (`Assigned To` / `Lead Owner` values are not treated as lead contact)
+- Skip tracking for invalid rows
+- Contact-presence check excludes owner/assignee columns before skip/import decision
+- `created_at` accepts empty when source date is unavailable (instead of fixed placeholder dates)
+- Export imported/skipped records from UI
+- Dark mode support
 
-| Variable | Default | Description |
-|---|---|---|
-| `PORT` | `8000` | Server port |
-| `OPENROUTER_API_KEY` | — | **Required.** Your OpenRouter API key |
-| `OPENROUTER_MODEL` | `auto` | Model to use (e.g. `anthropic/claude-3-5-sonnet`) |
-| `OPENROUTER_HTTP_REFERER` | `http://localhost:8000` | Referer header for OpenRouter |
-| `OPENROUTER_APP_NAME` | `GrowEasy CSV Importer` | App name header |
-| `CORS_ORIGIN` | `*` | Restrict to your frontend URL in production |
-| `BATCH_SIZE` | `10` | Rows per AI batch |
-| `UPLOAD_LIMIT_MB` | `10` | Max CSV upload size |
+## Repository structure
 
-### Frontend (`frontend/.env.local`)
+```text
+.
+├── backend/
+│   ├── src/
+│   │   ├── ai/client.ts
+│   │   ├── domain/
+│   │   │   ├── csv.ts
+│   │   │   ├── lead-schema.ts
+│   │   │   └── concurrency.ts
+│   │   ├── routes/
+│   │   │   ├── imports.ts
+│   │   │   └── imports-stream.ts
+│   │   ├── app.ts
+│   │   ├── config.ts
+│   │   └── server.ts
+│   └── src/__tests__/
+├── frontend/
+│   ├── src/
+│   │   ├── app/
+│   │   ├── components/
+│   │   ├── lib/
+│   │   └── types/
+│   └── ...
+├── aim.md
+└── package.json
+```
+
+## Local development
+
+### 1) Install dependencies
+
+```bash
+npm install
+```
+
+### 2) Configure environment
+
+Backend (`backend/.env`):
+
+```env
+PORT=8000
+CORS_ORIGIN=*
+UPLOAD_LIMIT_MB=10
+BATCH_SIZE=10
+AI_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+OPENROUTER_MODEL=auto
+OPENROUTER_HTTP_REFERER=http://localhost:8000
+OPENROUTER_APP_NAME=GrowEasy CSV Importer
+```
+
+Frontend (`frontend/.env.local`):
 
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
----
-
-## Running Tests
+### 3) Run app
 
 ```bash
-cd backend
-npm test              # run all tests once
-npm run test:watch    # watch mode
-npm run test:coverage # with v8 coverage report
+npm run dev
 ```
 
-**37 tests** across 3 suites:
-- `csv.test.ts` — parseCsv, looksLikeEmail, looksLikeMobile, hasEmailOrMobile, chunkRows
-- `lead-schema.test.ts` — Zod schema validation, enum defaults, normalizeLeadRecord
-- `concurrency.test.ts` — runWithConcurrency ordering, error handling, concurrency cap
+- Frontend: `http://localhost:3000`
+- Backend: `http://localhost:8000`
 
----
+## API endpoints
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/health` | Health check |
+| POST | `/api/imports` | Import CSV and return final JSON |
+| POST | `/api/imports/stream` | Import CSV and stream progress/results with SSE |
+
+## Scripts
+
+Root:
+
+- `npm run dev` - run frontend + backend together
+- `npm run dev:frontend` - run frontend only
+- `npm run dev:backend` - run backend only
+- `npm run build` - build backend and frontend
+
+Backend:
+
+- `npm test`
+- `npm run test:watch`
+- `npm run test:coverage`
 
 ## Docker
 
-```bash
-# Start both services
-OPENROUTER_API_KEY=your_key docker compose up --build
+This repo includes separate Dockerfiles:
 
-# Or set the key in a .env file at the project root:
-# OPENROUTER_API_KEY=your_key
-docker compose up --build
+- `backend/Dockerfile`
+- `frontend/Dockerfile`
+
+Build examples:
+
+```bash
+docker build -t groweasy-backend .\backend
+docker build -t groweasy-frontend .\frontend
 ```
 
-Services:
-- `backend` at `http://localhost:8000`
-- `frontend` at `http://localhost:3000`
+## DigitalOcean + Nginx deployment
 
-The backend has a health check (`GET /health`) and the frontend waits for it before starting.
+This setup runs the backend on a private port and exposes it through Nginx with HTTPS.
 
----
+### 1) Server prerequisites
 
-## API
+```bash
+sudo apt update
+sudo apt install -y git nginx
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+sudo npm i -g pm2
+```
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/health` | Health check |
-| `POST` | `/api/imports` | Upload CSV, returns JSON result |
-| `POST` | `/api/imports/stream` | Upload CSV, returns SSE stream |
+### 2) Clone and build
 
-### `POST /api/imports` — JSON response
+```bash
+cd /var/www
+git clone https://github.com/gagan771/Groweasy-CSV.git
+cd Groweasy-CSV
+npm install
+cd backend
+npm install
+npm run build
+```
 
-```json
-{
-  "imported": [{ "name": "...", "email": "...", "source_row_index": 0, ... }],
-  "skipped":  [{ "source_row_index": 1, "reason": "..." }],
-  "totals":   { "imported": 1, "skipped": 1, "processed": 2, "batches": 1 }
+### 3) Configure backend environment
+
+Create `backend/.env`:
+
+```env
+PORT=8010
+CORS_ORIGIN=https://groweasy-csv.vercel.app
+UPLOAD_LIMIT_MB=10
+BATCH_SIZE=10
+
+AI_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_API_KEY=your_openrouter_api_key
+OPENROUTER_MODEL=auto
+OPENROUTER_HTTP_REFERER=https://api.zentrip.social
+OPENROUTER_APP_NAME=GrowEasy CSV Importer
+```
+
+### 4) Start backend with PM2
+
+```bash
+cd /var/www/Groweasy-CSV/backend
+pm2 start dist/server.js --name groweasy-backend
+pm2 save
+pm2 startup
+```
+
+Verify local health:
+
+```bash
+curl -i http://127.0.0.1:8010/health
+```
+
+### 5) Nginx reverse proxy
+
+Create `/etc/nginx/sites-available/groweasy-api`:
+
+```nginx
+server {
+    listen 80;
+    server_name api.zentrip.social;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name api.zentrip.social;
+
+    ssl_certificate /etc/letsencrypt/live/api.zentrip.social/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.zentrip.social/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8010;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+    }
 }
 ```
 
-### `POST /api/imports/stream` — SSE events
+Enable and reload:
 
-| Event | Payload |
-|---|---|
-| `init` | `{ totalBatches, totalRows }` |
-| `batch_start` | `{ batchNumber, totalBatches }` |
-| `batch_done` | `{ batchNumber, totalBatches, imported[], skipped[] }` |
-| `done` | Full import response (same shape as JSON endpoint) |
-| `error` | `{ message }` |
-
----
-
-## Architecture
-
-```
-Upload → Client-side parse (preview only) → Confirm
-  → SSE stream opens
-  → Backend re-parses CSV
-  → Pre-filter: skip rows without email or mobile
-  → Chunk into batches of 10
-  → Run up to 3 batches concurrently (with 3-attempt exponential backoff)
-  → Each batch_done event streams partial results to frontend
-  → done event delivers final sorted result
-  → Frontend renders results table
+```bash
+sudo ln -sf /etc/nginx/sites-available/groweasy-api /etc/nginx/sites-enabled/groweasy-api
+sudo nginx -t
+sudo systemctl reload nginx
 ```
 
-## Project Layout
+### 6) TLS certificate (Let's Encrypt)
 
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d api.zentrip.social
 ```
-/
-├── backend/
-│   ├── src/
-│   │   ├── ai/client.ts          # OpenRouter AI extraction + retry
-│   │   ├── domain/
-│   │   │   ├── concurrency.ts    # runWithConcurrency utility
-│   │   │   ├── csv.ts            # parseCsv, hasEmailOrMobile, chunkRows
-│   │   │   └── lead-schema.ts    # Zod CRM schema + normalizeLeadRecord
-│   │   ├── routes/
-│   │   │   ├── imports.ts        # POST /api/imports (JSON)
-│   │   │   └── imports-stream.ts # POST /api/imports/stream (SSE)
-│   │   ├── app.ts
-│   │   ├── config.ts
-│   │   └── server.ts
-│   └── src/__tests__/            # 37 unit tests (vitest)
-├── frontend/
-│   └── src/
-│       ├── app/
-│       │   ├── layout.tsx        # Root layout with ThemeToggle
-│       │   └── page.tsx          # 4-step orchestrator (streaming)
-│       ├── components/
-│       │   ├── UploadStep.tsx    # Drag & drop upload
-│       │   ├── PreviewStep.tsx   # Virtualized preview table
-│       │   ├── ProgressStep.tsx  # Live streaming progress
-│       │   ├── ResultsStep.tsx   # Final results table
-│       │   └── ThemeToggle.tsx   # Dark mode toggle
-│       ├── lib/
-│       │   ├── api.ts            # uploadCsv (non-streaming fallback)
-│       │   ├── csv.ts            # Client-side CSV parser
-│       │   └── stream.ts         # SSE consumer (Fetch + ReadableStream)
-│       └── types/index.ts
-├── docker-compose.yml
-└── aim.md
+
+Verify public health:
+
+```bash
+curl -i https://api.zentrip.social/health
 ```
+
+### 7) Frontend (Vercel) environment
+
+Set in Vercel project settings:
+
+```env
+NEXT_PUBLIC_API_URL=https://api.zentrip.social
+```
+
+After adding env vars, redeploy frontend. Next.js reads `NEXT_PUBLIC_*` values at build time.

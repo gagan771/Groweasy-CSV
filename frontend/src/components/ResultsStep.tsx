@@ -69,28 +69,6 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function ImportedTable({ records }: { records: ImportedRecord[] }) {
-  const handleExport = useCallback(() => {
-    downloadCsv(
-      `groweasy_imported_${filenameDateStamp()}.csv`,
-      records.map((r) => ({
-        created_at: r.created_at,
-        name: r.name,
-        email: r.email,
-        country_code: r.country_code,
-        mobile_without_country_code: r.mobile_without_country_code,
-        company: r.company,
-        city: r.city,
-        state: r.state,
-        country: r.country,
-        lead_owner: r.lead_owner,
-        crm_status: r.crm_status,
-        crm_note: r.crm_note,
-        data_source: r.data_source,
-        possession_time: r.possession_time,
-        description: r.description,
-      })),
-    );
-  }, [records]);
   const columns = useMemo<ColumnDef<ImportedRecord>[]>(
     () => [
       { id: "name", header: "Name", accessorFn: (r) => r.name },
@@ -133,13 +111,6 @@ function ImportedTable({ records }: { records: ImportedRecord[] }) {
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
           Imported Records ({records.length.toLocaleString()})
         </h3>
-        <button
-          onClick={handleExport}
-          className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-800"
-        >
-          <DownloadIcon />
-          Export CSV
-        </button>
       </div>
       <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
         <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-700">
@@ -182,16 +153,6 @@ function ImportedTable({ records }: { records: ImportedRecord[] }) {
 }
 
 function SkippedTable({ records }: { records: SkippedRecord[] }) {
-  const handleExport = useCallback(() => {
-    downloadCsv(
-      `groweasy_skipped_${filenameDateStamp()}.csv`,
-      records.map((r) => ({
-        row_number: r.source_row_index + 1,
-        reason: r.reason,
-      })),
-    );
-  }, [records]);
-
   if (records.length === 0) return null;
 
   return (
@@ -200,13 +161,6 @@ function SkippedTable({ records }: { records: SkippedRecord[] }) {
         <h3 className="text-sm font-semibold text-red-600 dark:text-red-400">
           Skipped Rows ({records.length.toLocaleString()})
         </h3>
-        <button
-          onClick={handleExport}
-          className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/20"
-        >
-          <DownloadIcon />
-          Export CSV
-        </button>
       </div>
       <div className="overflow-x-auto rounded-lg border border-red-200 dark:border-red-900/40">
         <table className="min-w-full divide-y divide-red-100 text-sm dark:divide-red-900/30">

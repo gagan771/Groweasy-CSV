@@ -30,8 +30,23 @@ export function parseCsv(text: string): ParseResult {
 }
 
 export function hasEmailOrMobile(row: CsvRow): boolean {
-  const values = Object.values(row).map((value) => String(value ?? "").trim());
-  return values.some((value) => looksLikeEmail(value) || looksLikeMobile(value));
+  const entries = Object.entries(row).map(([header, value]) => ({
+    header,
+    value: String(value ?? "").trim(),
+  }));
+  const nonOwnerEntries = entries.filter((entry) => !isLikelyLeadOwnerHeader(entry.header));
+
+  if (nonOwnerEntries.length === 0) return false;
+
+  const leadContactHeaderEntries = nonOwnerEntries.filter((entry) =>
+    isLikelyLeadContactHeader(entry.header),
+  );
+  const candidates =
+    leadContactHeaderEntries.length > 0 ? leadContactHeaderEntries : nonOwnerEntries;
+
+  return candidates.some(
+    (entry) => looksLikeEmail(entry.value) || looksLikeMobile(entry.value),
+  );
 }
 
 export function looksLikeEmail(value: string): boolean {
@@ -45,6 +60,48 @@ export function looksLikeMobile(value: string): boolean {
   if (!/^\d+$/.test(cleaned)) return false;
   // Digit count must be in the valid international phone range
   return cleaned.length >= 7 && cleaned.length <= 15;
+}
+
+export function normalizeHeaderForMatch(header: string): string {
+  return header
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+export function isLikelyLeadOwnerHeader(header: string): boolean {
+  const normalized = normalizeHeaderForMatch(header);
+  const ownerHints = [
+    "assigned to",
+    "lead owner",
+    "owner",
+    "sales rep",
+    "salesperson",
+    "sales person",
+    "relationship manager",
+    "rm",
+    "agent",
+    "advisor",
+    "executive",
+  ];
+  return ownerHints.some((hint) => normalized.includes(hint));
+}
+
+export function isLikelyLeadContactHeader(header: string): boolean {
+  const normalized = normalizeHeaderForMatch(header);
+  const contactHints = [
+    "email",
+    "e-mail",
+    "mail",
+    "phone",
+    "mobile",
+    "contact",
+    "whatsapp",
+    "cell",
+    "tel",
+  ];
+  return contactHints.some((hint) => normalized.includes(hint));
 }
 
 export function chunkRows<T>(rows: readonly T[], size: number): T[][] {

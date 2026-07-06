@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { looksLikeEmail, looksLikeMobile } from "./csv";
+import {
+  looksLikeEmail,
+  looksLikeMobile,
+  isLikelyLeadOwnerHeader,
+  isLikelyLeadContactHeader,
+  normalizeHeaderForMatch,
+} from "./csv";
 
 export const crmStatusValues = [
   "GOOD_LEAD_FOLLOW_UP",
@@ -19,10 +25,13 @@ export const dataSourceValues = [
 export const leadRecordSchema = z.object({
   created_at: z
     .string()
-    .min(1, { message: "created_at is required" })
-    .refine((value) => !Number.isNaN(new Date(value).getTime()), {
-      message: "created_at must be a valid date string parseable by new Date()",
-    }),
+    .refine(
+      (value) =>
+        value.trim() === "" || !Number.isNaN(new Date(value).getTime()),
+      {
+        message: "created_at must be empty or a valid date string parseable by new Date()",
+      },
+    ),
   name: z.string().nullish().default(""),
   email: z.string().nullish().default(""),
   country_code: z.string().nullish().default(""),
@@ -73,30 +82,96 @@ export function mergeContactFields(
   record: LeadRecord,
   rawRow: Record<string, string>,
 ): LeadRecord {
-  const values = Object.values(rawRow).map((v) => String(v ?? "").trim());
-  const allEmails = values.filter((v) => looksLikeEmail(v));
-  const allPhones = values.filter((v) => looksLikeMobile(v));
+  const entries = Object.entries(rawRow).map(([header, value]) => ({
+    header,
+    normalizedHeader: normalizeHeaderForMatch(header),
+    value: String(value ?? "").trim(),
+  }));
 
-  let email = record.email || allEmails[0] || "";
-  let mobile = record.mobile_without_country_code || allPhones[0] || "";
+  const ownerEntries = entries.filter((entry) => isLikelyLeadOwnerHeader(entry.header));
+  const nonOwnerEntries = entries.filter((entry) => !isLikelyLeadOwnerHeader(entry.header));
+  const leadContactHeaderEntries = nonOwnerEntries.filter((entry) =>
+    isLikelyLeadContactHeader(entry.header),
+  );
+  const contactCandidates =
+    leadContactHeaderEntries.length > 0 ? leadContactHeaderEntries : nonOwnerEntries;
+
+  const allEmails = contactCandidates
+    .map((entry) => entry.value)
+    .filter((value) => looksLikeEmail(value));
+  const allPhones = contactCandidates
+    .map((entry) => entry.value)
+    .filter((value) => looksLikeMobile(value));
+
+  const ownerValues = ownerEntries
+    .map((entry) => entry.value)
+    .filter((value) => value.length > 0);
+
+  const candidateEmailSet = new Set(allEmails.map((value) => value.toLowerCase()));
+  const normalizePhone = (value: string) => value.replace(/[^\d]/g, "");
+  const candidatePhoneSet = new Set(allPhones.map((value) => normalizePhone(value)));
+
+  let email = (record.email ?? "").trim();
+  if (email && !candidateEmailSet.has(email.toLowerCase())) {
+    email = "";
+  }
+  if (!email) email = allEmails[0] || "";
+
+  let mobile = (record.mobile_without_country_code ?? "").trim();
+  if (mobile && !candidatePhoneSet.has(normalizePhone(mobile))) {
+    mobile = "";
+  }
+  if (!mobile) mobile = allPhones[0] || "";
+
+  const pickFromHeaderHints = (
+    hints: string[],
+    fallbackEntries: typeof nonOwnerEntries = nonOwnerEntries,
+  ): string => {
+    const found = fallbackEntries.find(
+      (entry) =>
+        entry.value.length > 0 &&
+        hints.some((hint) => entry.normalizedHeader.includes(hint)),
+    );
+    return found?.value ?? "";
+  };
+
+  const company = (record.company ?? "").trim() || pickFromHeaderHints(["company", "business"]);
+  const city = (record.city ?? "").trim() || pickFromHeaderHints(["city", "location", "town"]);
+  const state = (record.state ?? "").trim() || pickFromHeaderHints(["state", "region", "province"]);
+  const country =
+    (record.country ?? "").trim() || pickFromHeaderHints(["country", "nation"]);
+  const leadOwner = (record.lead_owner ?? "").trim() || ownerValues[0] || pickFromHeaderHints(
+    ["assigned to", "lead owner", "owner", "sales rep", "salesperson", "sales person"],
+    entries,
+  );
+
   const extras: string[] = [];
 
   if (record.crm_note) extras.push(record.crm_note);
 
   // Extra emails beyond the first
   for (let i = allEmails[0] === email ? 1 : 0; i < allEmails.length; i++) {
-    if (allEmails[i] !== email) extras.push(`extra email: ${allEmails[i]}`);
+    if (allEmails[i].toLowerCase() !== email.toLowerCase()) {
+      extras.push(`extra email: ${allEmails[i]}`);
+    }
   }
 
   // Extra phones beyond the first
   for (let i = allPhones[0] === mobile ? 1 : 0; i < allPhones.length; i++) {
-    if (allPhones[i] !== mobile) extras.push(`extra phone: ${allPhones[i]}`);
+    if (normalizePhone(allPhones[i]) !== normalizePhone(mobile)) {
+      extras.push(`extra phone: ${allPhones[i]}`);
+    }
   }
 
   return {
     ...record,
     email,
     mobile_without_country_code: mobile,
+    company,
+    city,
+    state,
+    country,
+    lead_owner: leadOwner,
     crm_note: extras.filter(Boolean).join("; "),
   };
 }
