@@ -98,12 +98,12 @@ export function mergeContactFields(
   const contactCandidates =
     leadContactHeaderEntries.length > 0 ? leadContactHeaderEntries : nonOwnerEntries;
 
-  const allEmails = contactCandidates
-    .map((entry) => entry.value)
-    .filter((value) => looksLikeEmail(value));
-  const allPhones = contactCandidates
-    .map((entry) => entry.value)
-    .filter((value) => looksLikeMobile(value));
+  const allEmails = contactCandidates.flatMap((entry) =>
+    entry.value.split(/[;,]+/).map((s) => s.trim()).filter((v) => looksLikeEmail(v)),
+  );
+  const allPhones = contactCandidates.flatMap((entry) =>
+    entry.value.split(/[;,]+/).map((s) => s.trim()).filter((v) => looksLikeMobile(v)),
+  );
 
   const ownerValues = ownerEntries
     .map((entry) => entry.value)

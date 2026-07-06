@@ -50,16 +50,15 @@ export function hasEmailOrMobile(row: CsvRow): boolean {
 }
 
 export function looksLikeEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  return value.split(/[;,]+/).some((segment) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(segment.trim()));
 }
 
 export function looksLikeMobile(value: string): boolean {
-  // Strip common phone formatting characters first
-  const cleaned = value.replace(/[\s\-().+]/g, "");
-  // Must consist only of digits after stripping (no letters, no other symbols)
-  if (!/^\d+$/.test(cleaned)) return false;
-  // Digit count must be in the valid international phone range
-  return cleaned.length >= 7 && cleaned.length <= 15;
+  return value.split(/[;,]+/).some((segment) => {
+    const cleaned = segment.replace(/[\s\-().+]/g, "");
+    if (!/^\d+$/.test(cleaned)) return false;
+    return cleaned.length >= 7 && cleaned.length <= 15;
+  });
 }
 
 export function normalizeHeaderForMatch(header: string): string {
@@ -100,6 +99,10 @@ export function isLikelyLeadContactHeader(header: string): boolean {
     "whatsapp",
     "cell",
     "tel",
+    "alternate",
+    "secondary",
+    "alt number",
+    "alt phone",
   ];
   return contactHints.some((hint) => normalized.includes(hint));
 }
